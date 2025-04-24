@@ -14,6 +14,8 @@ import type {
   UserLeftPayload,
   RoomStatePayload,
   ErrorPayload,
+  ChatMessage,
+  ChatMessagePayload,
 } from '@vestream/shared';
 
 const app = express();
@@ -29,6 +31,7 @@ const rooms = new Map<string, Room>();
 const users = new Map<string, User>();
 const connections = new Map<string, WebSocket>();
 const activeStreams = new Map<string, boolean>(); // roomId -> hasActiveStream
+const chatMessages = new Map<string, ChatMessage[]>(); // roomId -> messages
 
 // Helper function to send WebSocket messages
 function sendMessage(ws: WebSocket, message: WSMessage) {
@@ -100,6 +103,12 @@ function getRoomWithUsers(roomId: string) {
   };
 }
 
+// Function to get recent chat messages for a room
+function getRoomMessages(roomId: string, limit = 50) {
+  const messages = chatMessages.get(roomId) || [];
+  return messages.slice(-limit); // Return only the most recent messages
+}
+
 // REST endpoints
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
@@ -107,6 +116,15 @@ app.get('/api/health', (_req, res) => {
 
 app.get('/api/rooms', (_req, res) => {
   res.json(Array.from(rooms.values()));
+});
+
+// Get chat messages for a room
+app.get('/api/rooms/:roomId/messages', (req, res) => {
+  const { roomId } = req.params;
+  const limit = parseInt(req.query.limit as string) || 50;
+  
+  const messages = getRoomMessages(roomId, limit);
+  res.json(messages);
 });
 
 // WebSocket connection handling
@@ -144,6 +162,9 @@ wss.on('connection', (ws) => {
               name: `Room ${roomId}`,
               viewers: [],
             });
+            
+            // Initialize chat messages for this room
+            chatMessages.set(roomId, []);
           } else {
             // Check if username is taken in existing room
             if (isUsernameTaken(roomId, username)) {
@@ -196,12 +217,16 @@ wss.on('connection', (ws) => {
 
           const roomWithUsers = getRoomWithUsers(roomId);
 
+          // Get recent chat messages
+          const roomMessages = getRoomMessages(roomId);
+
           // Notify user of successful join
           sendMessage(ws, {
             type: 'ROOM_JOINED',
             payload: {
               room: roomWithUsers,
               user,
+              messages: roomMessages, // Include recent messages
             } as RoomJoinedPayload,
             timestamp,
           });
@@ -232,6 +257,66 @@ wss.on('connection', (ws) => {
             } as RoomStatePayload,
             timestamp,
           });
+          break;
+        }
+
+        case 'CHAT_MESSAGE': {
+          if (!currentUserId) return;
+          const user = users.get(currentUserId);
+          if (!user) return;
+
+          const { message: chatMessage } = message.payload as ChatMessagePayload;
+          
+          // Create a new message with server-generated ID and timestamp
+          const newMessage: ChatMessage = {
+            id: uuidv4(),
+            senderId: user.id,
+            senderUsername: user.username,
+            roomId: user.roomId,
+            content: chatMessage.content,
+            type: chatMessage.type,
+            recipientId: chatMessage.recipientId,
+            timestamp: new Date().toISOString(),
+          };
+
+          // Store the message
+          const roomMessages = chatMessages.get(user.roomId) || [];
+          roomMessages.push(newMessage);
+          chatMessages.set(user.roomId, roomMessages);
+
+          console.log(`Chat message from ${user.username} in room ${user.roomId}: ${chatMessage.content}`);
+
+          // For private messages, send only to the recipient
+          if (chatMessage.type === 'private' && chatMessage.recipientId) {
+            const recipientWs = connections.get(chatMessage.recipientId);
+            if (recipientWs) {
+              sendMessage(recipientWs, {
+                type: 'CHAT_MESSAGE_RECEIVED',
+                payload: {
+                  message: newMessage,
+                },
+                timestamp: newMessage.timestamp,
+              });
+            }
+            
+            // Also send back to the sender
+            sendMessage(ws, {
+              type: 'CHAT_MESSAGE_RECEIVED',
+              payload: {
+                message: newMessage,
+              },
+              timestamp: newMessage.timestamp,
+            });
+          } else {
+            // For public messages, broadcast to the entire room
+            broadcastToRoom(user.roomId, {
+              type: 'CHAT_MESSAGE_RECEIVED',
+              payload: {
+                message: newMessage,
+              },
+              timestamp: newMessage.timestamp,
+            });
+          }
           break;
         }
 
@@ -333,9 +418,10 @@ wss.on('connection', (ws) => {
             currentUserId
           );
 
-          // Remove empty rooms
+          // Remove empty rooms and their chat history
           if (!room.broadcaster && room.viewers.length === 0) {
             rooms.delete(user.roomId);
+            chatMessages.delete(user.roomId);
           } else {
             // Send updated room state
             broadcastToRoom(user.roomId, {

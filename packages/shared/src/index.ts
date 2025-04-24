@@ -13,6 +13,18 @@ export interface Room {
   viewers: string[]; // array of viewer userIds
 }
 
+// Chat message types
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderUsername: string;
+  roomId: string;
+  content: string;
+  type: 'public' | 'private';
+  recipientId?: string;
+  timestamp: string;
+}
+
 // WebSocket message types
 export type WSMessageType =
   | 'JOIN_ROOM'
@@ -27,7 +39,9 @@ export type WSMessageType =
   | 'ERROR'
   | 'STREAM_READY'
   | 'VIEWER_READY'
-  | 'BROADCASTER_READY';
+  | 'BROADCASTER_READY'
+  | 'CHAT_MESSAGE'
+  | 'CHAT_MESSAGE_RECEIVED';
 
 export interface WSMessage {
   type: WSMessageType;
@@ -45,6 +59,7 @@ export interface JoinRoomPayload {
 export interface RoomJoinedPayload {
   room: Room;
   user: User;
+  messages: ChatMessage[];
 }
 
 export interface RoomStatePayload {
@@ -73,6 +88,14 @@ export interface BroadcasterReadyPayload {
 
 export interface ViewerReadyPayload {
   viewer: User;
+}
+
+export interface ChatMessagePayload {
+  message: ChatMessage;
+}
+
+export interface ChatMessageReceivedPayload {
+  message: ChatMessage;
 }
 
 export interface ErrorPayload {

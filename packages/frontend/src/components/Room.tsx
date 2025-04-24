@@ -9,6 +9,7 @@ import type {
 } from '@vestream/shared';
 import { useWebSocket } from '../contexts/WebSocketContext';
 import { useWebRTC } from '../hooks/useWebRTC';
+import { ChatPanel } from './Chat';
 
 interface RoomProps {
   roomId: string;
@@ -265,62 +266,73 @@ export default function Room({ roomId, username, role, onError }: RoomProps) {
         </p>
       </div>
 
-      <div className={`grid ${role === 'broadcaster' ? 'grid-cols-2 md:grid-cols-3 gap-4' : 'grid-cols-1 gap-4'}`}>
-        {/* Broadcaster's own video */}
-        {role === 'broadcaster' && (
-          <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              playsInline
-              muted
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded">
-              You (Broadcaster)
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Video Grid - Takes 2/3 of space on large screens */}
+        <div className={`lg:col-span-2 grid ${role === 'broadcaster' ? 'grid-cols-2 gap-4' : 'grid-cols-1 gap-4'}`}>
+          {/* Broadcaster's own video */}
+          {role === 'broadcaster' && (
+            <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded">
+                You (Broadcaster)
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Broadcaster's view of viewers */}
-        {role === 'broadcaster' && remoteUser && (
-          <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded">
-              {remoteUser.username} (Viewer)
+          {/* Broadcaster's view of viewers */}
+          {role === 'broadcaster' && remoteUser && (
+            <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded">
+                {remoteUser.username} (Viewer)
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Viewer count for broadcaster */}
-        {role === 'broadcaster' && room?.viewers && room.viewers.length > 0 && (
-          <div className="relative aspect-video bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center">
-            <div className="text-white text-center p-4">
-              <div className="text-3xl font-bold">{room.viewers.length}</div>
-              <div>Active Viewers</div>
+          {/* Viewer count for broadcaster (only show on smaller screens when there's no chat next to it) */}
+          {role === 'broadcaster' && room?.viewers && room.viewers.length > 0 && !remoteUser && (
+            <div className="relative lg:hidden aspect-video bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center">
+              <div className="text-white text-center p-4">
+                <div className="text-3xl font-bold">{room.viewers.length}</div>
+                <div>Active Viewers</div>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Viewer's view of broadcaster */}
-        {role === 'viewer' && (
-          <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded">
-              Broadcaster {broadcaster?.username ? `(${broadcaster.username})` : ''}
+          {/* Viewer's view of broadcaster */}
+          {role === 'viewer' && (
+            <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded">
+                Broadcaster {broadcaster?.username ? `(${broadcaster.username})` : ''}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+        
+        {/* Chat Panel - Takes 1/3 of space on large screens */}
+        <div className="h-[500px]">
+          <ChatPanel 
+            roomId={roomId}
+            currentUser={currentUser}
+          />
+        </div>
       </div>
     </div>
   );
